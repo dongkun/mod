@@ -1,26 +1,29 @@
 /**
  * file: mod.js
- * ver: 1.0.11
- * update: 2015/05/14
+ * ver: 1.0.7
+ * update: 2014/4/14
  *
- * https://github.com/fex-team/mod
+ * https://github.com/zjcqoo/mod
  * DK feature
  * 1、add roadmap;
  * 2、add css deps;
  * 3、add needPack;
+ * 4、fixed repeat link css；
+ * 5、fixed css has no define's callback;
  */
 var require, define;
 
 (function(global) {
-    if (require) return; // 避免重复加载而导致已定义模块丢失
-
     var head = document.getElementsByTagName('head')[0],
         loadingMap = {},
         factoryMap = {},
         modulesMap = {},
         scriptsMap = {},
+        cssMap = {},
         resMap = {},
         pkgMap = {};
+
+
 
     function createScript(url, onerror) {
         if (url in scriptsMap) return;
@@ -62,7 +65,7 @@ var require, define;
         //
         // resource map query
         //
-        var res = resMap[id] || resMap[id + '.js'] || {};
+        var res = resMap[id] || {};
         var pkg = res.pkg;
         var url;
 
@@ -73,11 +76,12 @@ var require, define;
         }
         // add roadmap
         url = require.roadmap + url;
-
         if (/\.css$/i.test(url)) {
             require.loadCss({
                 url: url
             });
+            // css没有define  手动执行
+            callback();
         } else {
             createScript(url, onerror && function() {
                 onerror(id);
@@ -86,7 +90,6 @@ var require, define;
     }
 
     define = function(id, factory) {
-        id = id.replace(/\.js$/i, '');
         factoryMap[id] = factory;
 
         var queue = loadingMap[id];
@@ -99,12 +102,6 @@ var require, define;
     };
 
     require = function(id) {
-
-        // compatible with require([dep, dep2...]) syntax.
-        if (id && id.splice) {
-            return require.async.apply(this, arguments);
-        }
-
         id = require.alias(id);
 
         var mod = modulesMap[id];
@@ -140,6 +137,10 @@ var require, define;
             names = [names];
         }
 
+        for (var i = 0, n = names.length; i < n; i++) {
+            names[i] = require.alias(names[i]);
+        }
+
         var needMap = {};
         var needNum = 0;
 
@@ -148,18 +149,8 @@ var require, define;
                 //
                 // skip loading or loaded
                 //
-                var dep = require.alias(depArr[i]);
-
-                if (dep in factoryMap) {
-                    // check whether loaded resource's deps is loaded or not
-                    var child = resMap[dep] || resMap[dep + '.js'] || resMap[dep + '.css'];
-                    if (child && 'deps' in child) {
-                        findNeed(child.deps);
-                    }
-                    continue;
-                }
-
-                if (dep in needMap) {
+                var dep = depArr[i];
+                if (dep in factoryMap || dep in needMap) {
                     continue;
                 }
 
@@ -167,7 +158,7 @@ var require, define;
                 needNum++;
                 loadScript(dep, updateNeed, onerror);
 
-                var child = resMap[dep] || resMap[dep + '.js'] || resMap[dep + '.css'];
+                var child = resMap[dep];
                 if (child && 'deps' in child) {
                     findNeed(child.deps);
                 }
@@ -227,6 +218,8 @@ var require, define;
             }
             head.appendChild(sty);
         } else if (cfg.url) {
+            if (cfg.url in cssMap) return;
+            cssMap[cfg.url] = true;
             var link = document.createElement('link');
             link.href = cfg.url;
             link.rel = 'stylesheet';
@@ -237,7 +230,7 @@ var require, define;
 
 
     require.alias = function(id) {
-        return id.replace(/\.js$/i, '').replace(/\.css$/i, '');
+        return id
     };
 
     require.timeout = 5000;
